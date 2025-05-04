@@ -1,0 +1,10 @@
+nn-lang:
+  label: nn
+  permalink: /nn-lang
+  description: nn-lang tag description
+
+hello:
+  label: Hello
+  permalink: /hello
+  description: Hello tag description
+
