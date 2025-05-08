@@ -1,0 +1,129 @@
+---
+slug: "01-starting-with"
+title: "01. Starting with"
+description: "nn 개발기 1편"
+date: "2024-09-29"
+authors: [sier-vr]
+tags: ['nn-lang']
+---
+
+> [SieR-VR blog](https://sier-vr.github.io/posts/01-starting-with)에서 가져온 글입니다.
+
+nn이라는 언어를 처음 고안한건 2022년 말~2023년 초 쯤이었다.
+
+다만 그 당시에는 훨씬 범용 프로그래밍 언어적인 성격이 강했는데,
+
+```
+entry(x: Tensor, a: Tensor, b: Tensor) {
+  let x = MatMul(x, a);
+  let x = Bias(x, b);
+
+  x
+}
+```
+
+Rust의 서브셋같은 느낌으로 처음 구현했었다. (Python)
+
+-------------------------
+
+다만 만들다보니 파이썬을 선택한 의미가 많이 퇴색됐고, (프레임워크 호환성을 위해 선택했었다.)
+
+파이썬 자체 문제 (익숙하지 않은 타이핑 방식, 라이브러리의 부실한 타이핑 및 문서)로 인해 사실상 개발이 많이 어려워져 버려두고 있었다.
+(당시 코드는 [여기](https://github.com/SieR-VR/nn/tree/python)에서 확인할 수 있다.)
+
+그 사이에 함수형 언어들을 접하면서 문법을 바라보는 시각도 조금 달라졌었다.
+
+올해에는 꼭 만들어보자 하고 다짐했었는데, 올해 초에는 새 직장에도 적응해야 했고, 개인적으로 다시 잡을만한 시간이 안 나서 이제야 개발에 손을 대고 있다.
+
+-------------------------
+
+기존에 파이썬으로 구현한 경험이 있어서 새삼 느끼지만, 역시 Typescript로 구현하는 편이 훨씬 편하고 코드 정리하기도 쉬웠다.
+
+아무튼, 이 개발기는 Typescript로 작성한 코드 기준으로 쓰일 예정이다. 개변 이전의 역사도 가끔 언급될지도 모르겠지만..
+
+-------------------------
+
+## 2024-09-06 [3b0ea58](https://github.com/SieR-VR/nn/tree/3b0ea58b72485470b2c5c580a5a0b86b0cc991fd)
+
+맨 처음 proof-of-concept는 [ohm.js](https://ohmjs.org/)를 이용하여 만들어졌다.
+
+당시 ohmjs 문법 파일은 이런 형태였다.
+
+### [src/ohm/nn.ohm](https://github.com/SieR-VR/nn/blob/3b0ea58b72485470b2c5c580a5a0b86b0cc991fd/src/ohm/nn.ohm)
+```
+SourceCode {
+  Declaration = identifier SizeDecls? Arguments "=" "|>"? Expression ("|>" Expression)*
+    
+  Expression = TupleExpression
+  
+  StringLiteralExpression = string
+  IdentifierExpression = identifier -- ident
+    | StringLiteralExpression
+  CallExpression = identifier SizeType? "(" ListOf<Expression, ","> ")" -- call
+    | IdentifierExpression
+  TupleExpression = Expression ( "," Expression ) + -- tuple
+    | CallExpression
+  
+  Arguments = "(" ListOf<ArgumentDeclaration, ","> ")"
+  ArgumentDeclaration = identifier ":" Type
+  
+  Type = identifier SizeType?
+  SizeType = "[" ListOf<Size, ","> "]"
+  Size = PowerSize
+
+  SizeDecls = "[" ListOf<identifier, ","> "]"
+  
+  SimpleSize = number | identifier
+  ParenSize = "(" Size ")" -- paren
+    | SimpleSize
+  AddSize = Size "+" Size -- add
+    | ParenSize
+  MultipleSize = Size "*" Size -- mul
+    | AddSize
+  PowerSize = Size "^" Size -- pow
+    | MultipleSize
+  
+  string = singleQuoteString | doubleQuoteString 
+  singleQuoteString = "'" identifier "'"
+  doubleQuoteString = "\"" identifier "\""
+  
+  identifier = identifierName
+  identifierName = identifierStart identifierPart*
+  identifierStart = "_" | "$" | letter
+  identifierPart = identifierStart | digit
+  
+  number = "1".."9" digit*
+}
+```
+
+tree-sitter를 사용하는 지금도 큰 틀에서 벗어나지는 않는다.
+
+### [test/parse/linear.nn](https://github.com/SieR-VR/nn/blob/3b0ea58b72485470b2c5c580a5a0b86b0cc991fd/test/parse/linear.nn)
+```nn filename="linear.nn"
+Linear(x: Tensor) = 
+  x, Trainable('weight')
+  |> MatMul(), Trainable('bias')
+  |> Bias()
+```
+
+당시 작성했었던 Linear 코드이다.
+
+또한 간단하게라도 Python 코드젠을 만들었는데,
+
+위 코드에 사이즈 정보를 더해 컴파일하면
+
+```python
+class Linear:
+  def __init__(self, input, channel):
+    self.weight = Tensor.zeros(input, channel)
+    self.bias = Tensor.zeros(channel)
+
+  def __call__(self, x: Tensor):
+    y = MatMul(x, self.weight)
+    y = Bias(y, self.bias)
+    return y
+```
+
+와 같이 간단하게 코드젠이 이루어지는 정도까지는 만들었다.
+
+코드젠 코드는 [여기](https://github.com/SieR-VR/nn/blob/3b0ea58b72485470b2c5c580a5a0b86b0cc991fd/src/synth.ts)에서 읽어볼 수 있다.

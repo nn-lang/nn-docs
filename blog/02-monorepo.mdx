@@ -1,0 +1,136 @@
+---
+slug: "02-name-resolver"
+title: "02. Name Resolver"
+description: "nn 개발기 2편"
+date: "2024-10-01"
+authors: [sier-vr]
+tags: ['nn-lang']
+---
+
+> [SieR-VR blog](https://sier-vr.github.io/posts/02-monorepo)에서 가져온 글입니다.
+
+## 2024-09-11 [a5e9153](https://github.com/SieR-VR/nn/tree/a5e91537f8d47b938404be3395e26a8f66c2720f)
+
+파서와 간단한 코드젠(트랜스폼)을 만들고 그 다음에 만들어야겠다 생각한 건 타입 체커였다.
+
+사실상의 메인 피쳐이고, 가장 구현하는 데 시간이 오래 걸렸다.
+
+### [src/resolver/types.ts#3-28](https://github.com/SieR-VR/nn/blob/a5e91537f8d47b938404be3395e26a8f66c2720f/packages/nn-type-checker/src/resolver/types.ts#L3-L28)
+```ts
+export interface FileScope {
+	path: string;
+	declarations: DeclarationScope[];
+}
+
+export interface DeclarationScope {
+	file: FileScope;
+	declaration: string;
+
+	sizes: Size[];
+	values: Value[];
+}
+
+export interface Size {
+	scope: DeclarationScope;
+	ident: string;
+
+	nodes: Set<Node>;
+}
+
+export interface Value {
+	scope: DeclarationScope;
+	ident: string;
+
+	nodes: Set<Node>;
+}
+```
+
+Name Resolver에 사용할 타입들의 정의이다. 
+
+- 파일 단위의 Scope를 기록할 FileScope
+- 함수 정의 내에서의 Scope를 기록할 DeclarationScope
+- 이름에 따라 AST 노드들을 묶는 Size, Value 
+
+구현은 이 타입 정의에 따라 내부 값들을 채워넣는 게 전부였다.
+
+### [src/resolver/index.ts#37-86](https://github.com/SieR-VR/nn/tree/a5e91537f8d47b938404be3395e26a8f66c2720f/packages/nn-type-checker/src/resolver#L37-L86)
+```ts
+for (const decl of sourceCode) {
+  const declScope: DeclarationScope = {
+    file: fileScope,
+    declaration: decl.name.value,
+    sizes: [],
+    values: []
+  }
+
+  decl.sizeDeclList.decls
+    .forEach(ident => {
+      const sizeScope = toSize(declScope, ident);
+      declScope.sizes.push(sizeScope);
+    });
+
+  decl.argumentList.args
+    .forEach(arg => {
+      const valueScope = toValue(declScope, arg.ident);
+      declScope.values.push(valueScope);
+    });
+
+  const callExpressions = travel(decl.exprs, isCallExpression);
+  const identExprs = travel(decl.exprs, isIdentifierExpression);
+
+  identExprs
+    .forEach(identExpr => {
+      const value = findValue(declScope, identExpr.ident.value);
+
+      if (value) {
+        value.nodes.add(identExpr.ident);
+      } else {
+        const newValue = toValue(declScope, identExpr.ident);
+        declScope.values.push(newValue);
+      }
+    });
+
+  callExpressions
+    .flatMap(sizeDeclList => sizeDeclList.sizes)
+    .filter(ident => !!ident)
+    .filter(ident => typeof ident !== "number")
+    .forEach(ident => {
+      const size = findSize(declScope, ident.value);
+
+      if (size) {
+        size.nodes.add(ident);
+      } else {
+        const newSize = toSize(declScope, ident);
+        declScope.sizes.push(newSize);
+      }
+    });
+
+  fileScope.declarations.push(declScope);
+}
+```
+
+처음 구현했던 name revoler 코드이다.
+
+위 함수를 구현하고 느낀 건데, 생각했던 것 만큼 구현 과정이 어렵진 않았다.
+
+- 일단 필요한 값들과 타입을 잘 정의한 후,
+- travel 함수를 잘 이용하여 목적 노드들을 뽑아오고, 
+- 구한 노드에서 적절한 처리를 하여 필요한 값들을 얻어내면 완성
+
+이라는 큰 틀이 잡히기 시작했다.
+
+-------------------------
+
+## Monorepo
+
+그 외 큰 변경점이라면, yarn monorepo를 활용해 모듈을 크게 세 개로 분리했다.
+
+### 파일 구조
+
+- root
+  - packages
+    - nn-language (파싱, 기본적인 처리)
+    - nn-language-server (언어 서버)
+    - nn-type-checker (이름, 타입 체킹)
+
+대략 이런 형태인데, 이 중 언어 서버 구현에 관한 내용을 다음 글에서 풀어볼까 한다.
